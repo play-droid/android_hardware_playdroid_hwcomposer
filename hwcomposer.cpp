@@ -324,7 +324,7 @@ static int hwc_open(const struct hw_module_t* module, const char* name,
     }
 
     const char *socket_path = "/run/playdroid_socket";
-    if (property_get("playdroid.socket_path", property, SOCKET_PATH) > 0) {
+    if (property_get("playdroid.socket_path", property, socket_path) > 0) {
         socket_path = property;
     }
 
