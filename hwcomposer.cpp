@@ -53,9 +53,9 @@ struct playdroid_hwc_composer_device_1 {
     bool vsync_callback_enabled; // protected by this->vsync_lock
 };
 
-static int hwc_prepare(hwc_composer_device_1_t* dev,
-                       size_t numDisplays, hwc_display_contents_1_t** displays) {
-    struct playdroid_hwc_composer_device_1 *pdev = (struct playdroid_hwc_composer_device_1 *)dev;
+static int hwc_prepare(hwc_composer_device_1_t *dev __unused,
+                       size_t numDisplays, hwc_display_contents_1_t **displays) {
+    //struct playdroid_hwc_composer_device_1 *pdev = (struct playdroid_hwc_composer_device_1 *)dev;
 
     if (!numDisplays || !displays) return 0;
 
@@ -78,7 +78,7 @@ static int hwc_prepare(hwc_composer_device_1_t* dev,
     return 0;
 }
 
-static int hwc_set(struct hwc_composer_device_1* dev,size_t numDisplays,
+static int hwc_set(struct hwc_composer_device_1* dev, size_t numDisplays,
                    hwc_display_contents_1_t** displays) {
     struct playdroid_hwc_composer_device_1* pdev = (struct playdroid_hwc_composer_device_1*)dev;
 
@@ -110,6 +110,11 @@ static int hwc_set(struct hwc_composer_device_1* dev,size_t numDisplays,
         fb_target_layer = fb_layer;
     }
 
+    if (!fb_target_layer) {
+        ALOGE("No framebuffer target layer found");
+        return -EINVAL;
+    }
+    
     if (pdev->gtype == GRALLOC_GBM) {
         struct gralloc_handle_t *drm_handle = (struct gralloc_handle_t *)fb_target_layer->handle;
         pdev->message.type = MSG_HAVE_BUFFER;
@@ -251,6 +256,11 @@ static int hwc_close(hw_device_t* dev) {
     
     delete dev;
     return 0;
+}
+
+static int
+str_starts_with(const char *a, const char *b) {
+    return strncmp(a, b, strlen(b));
 }
 
 int get_gralloc_type(const char *gralloc) {
