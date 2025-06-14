@@ -28,8 +28,6 @@
 
 #include "playsocket.h"
 
-const char *SOCKET_PATH = "/run/playdroid_socket";
-
 enum {
     GRALLOC_ANDROID,
     GRALLOC_GBM,
@@ -133,6 +131,10 @@ static int hwc_set(struct hwc_composer_device_1* dev, size_t numDisplays,
         pdev->message.offset = cros_handle->offsets[0];
 
         send_message(pdev->sock, cros_handle->fds[0], MSG_TYPE_FD, &pdev->message);
+    }
+
+    if (fb_target_layer->acquireFenceFd != -1) {
+        close(fb_target_layer->acquireFenceFd);
     }
 
     return 0;
@@ -321,7 +323,12 @@ static int hwc_open(const struct hw_module_t* module, const char* name,
         pdev->gtype = get_gralloc_type(property);
     }
 
-    pdev->sock = connect_socket(SOCKET_PATH);
+    const char *socket_path = "/run/playdroid_socket";
+    if (property_get("playdroid.socket_path", property, SOCKET_PATH) > 0) {
+        socket_path = property;
+    }
+
+    pdev->sock = connect_socket(socket_path);
 
     pdev->message.type = MSG_HELLO;
     ret = send_message(pdev->sock, -1, MSG_TYPE_DATA, &pdev->message);
