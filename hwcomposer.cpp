@@ -15,12 +15,14 @@
  * limitations under the License.
  */
 #include <errno.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <unistd.h>
 
 #include <cros_gralloc/cros_gralloc_handle.h>
 #include <gralloc_handle.h>
 
+#include <log/log.h>
 #include <cutils/properties.h>
 #include <hardware/hwcomposer.h>
 
@@ -39,7 +41,6 @@ struct playdroid_hwc_composer_device_1 {
     hwc_composer_device_1_t base; // constant after init
     const hwc_procs_t *procs;     // constant after init
     int32_t vsync_period_ns;      // constant after init
-    struct display *display;      // constant after init
     int gtype;
 
     int sock;
@@ -79,11 +80,38 @@ static int hwc_prepare(hwc_composer_device_1_t* dev,
 
 static int hwc_set(struct hwc_composer_device_1* dev,size_t numDisplays,
                    hwc_display_contents_1_t** displays) {
-    char property[PROPERTY_VALUE_MAX];
     struct playdroid_hwc_composer_device_1* pdev = (struct playdroid_hwc_composer_device_1*)dev;
 
+    if (!numDisplays || !displays) {
+        return 0;
+    }
+
+    hwc_display_contents_1_t *contents = displays[HWC_DISPLAY_PRIMARY];
+    hwc_layer_1_t *fb_target_layer;
+
+    for (size_t l = 0; l < contents->numHwLayers; l++) {
+        size_t layer = l;
+        hwc_layer_1_t *fb_layer = &contents->hwLayers[layer];
+
+        if (fb_layer->compositionType != HWC_FRAMEBUFFER_TARGET) {
+            if (fb_layer->acquireFenceFd != -1) {
+                close(fb_layer->acquireFenceFd);
+            }
+            continue;
+        }
+
+        if (!fb_layer->handle) {
+            if (fb_layer->acquireFenceFd != -1) {
+                close(fb_layer->acquireFenceFd);
+            }
+            continue;
+        }
+
+        fb_target_layer = fb_layer;
+    }
+
     if (pdev->gtype == GRALLOC_GBM) {
-        struct gralloc_handle_t *drm_handle = (struct gralloc_handle_t *)layer->handle;
+        struct gralloc_handle_t *drm_handle = (struct gralloc_handle_t *)fb_target_layer->handle;
         pdev->message.type = MSG_HAVE_BUFFER;
         pdev->message.format = drm_handle->format;
         pdev->message.modifiers = drm_handle->modifier;
@@ -91,8 +119,8 @@ static int hwc_set(struct hwc_composer_device_1* dev,size_t numDisplays,
         pdev->message.offset = 0; // offset is not used in this case
 
         send_message(pdev->sock, drm_handle->prime_fd, MSG_TYPE_FD, &pdev->message);
-    } else if (pdev->display->gtype == GRALLOC_CROS) {
-        const struct cros_gralloc_handle *cros_handle = (const struct cros_gralloc_handle *)layer->handle;
+    } else if (pdev->gtype == GRALLOC_CROS) {
+        const struct cros_gralloc_handle *cros_handle = (const struct cros_gralloc_handle *)fb_target_layer->handle;
         pdev->message.type = MSG_HAVE_BUFFER;
         pdev->message.format = cros_handle->format;
         pdev->message.modifiers = cros_handle->format_modifier;
@@ -102,7 +130,7 @@ static int hwc_set(struct hwc_composer_device_1* dev,size_t numDisplays,
         send_message(pdev->sock, cros_handle->fds[0], MSG_TYPE_FD, &pdev->message);
     }
 
-    return err;
+    return 0;
 }
 
 static int hwc_query(struct hwc_composer_device_1* dev, int what, int* value) {
@@ -292,7 +320,7 @@ static int hwc_open(const struct hw_module_t* module, const char* name,
     ret = send_message(pdev->sock, -1, MSG_TYPE_DATA_NEEDS_REPLY, &pdev->message);
 
     MessageType type;
-    ret = recv_message(pdev->sock, NULL, &message, &type);
+    ret = recv_message(pdev->sock, NULL, &pdev->message, &type);
     if (type != MSG_TYPE_DATA_REPLY || pdev->message.type != MSG_HAVE_RESOLUTION) {
         ALOGE("Expected resolution reply, got type %d, message type %d",
              type, pdev->message.type);
