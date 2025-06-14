@@ -362,7 +362,7 @@ static int hwc_open(const struct hw_module_t* module, const char* name,
 
     *device = &pdev->base.common;
 
-    return ret;
+    return 0;
 }
 
 static struct hw_module_methods_t hwc_module_methods = {
