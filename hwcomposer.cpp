@@ -20,6 +20,7 @@
 #include <unistd.h>
 
 #include <cros_gralloc/cros_gralloc_handle.h>
+#include <drm_fourcc.h>
 #include <gralloc_handle.h>
 
 #include <log/log.h>
