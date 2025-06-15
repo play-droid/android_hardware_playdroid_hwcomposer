@@ -51,6 +51,27 @@ struct playdroid_hwc_composer_device_1 {
     bool vsync_callback_enabled; // protected by this->vsync_lock
 };
 
+int ConvertHalFormatToDrm(uint32_t hal_format) {
+    switch (hal_format) {
+    case HAL_PIXEL_FORMAT_RGB_888:
+        return DRM_FORMAT_BGR888;
+    case HAL_PIXEL_FORMAT_BGRA_8888:
+        return DRM_FORMAT_ARGB8888;
+    case HAL_PIXEL_FORMAT_RGBX_8888:
+        return DRM_FORMAT_XBGR8888;
+    case HAL_PIXEL_FORMAT_RGBA_8888:
+        return DRM_FORMAT_ABGR8888;
+    case HAL_PIXEL_FORMAT_RGB_565:
+        return DRM_FORMAT_BGR565;
+    case HAL_PIXEL_FORMAT_YV12:
+        return DRM_FORMAT_YVU420;
+    default:
+        ALOGE("Cannot convert hal format to drm format %u", hal_format);
+        return DRM_FORMAT_ARGB8888; // Default to ARGB8888
+    }
+    return DRM_FORMAT_ARGB8888;
+}
+
 static int hwc_prepare(hwc_composer_device_1_t *dev __unused,
                        size_t numDisplays, hwc_display_contents_1_t **displays) {
     //struct playdroid_hwc_composer_device_1 *pdev = (struct playdroid_hwc_composer_device_1 *)dev;
@@ -112,11 +133,11 @@ static int hwc_set(struct hwc_composer_device_1* dev, size_t numDisplays,
         ALOGE("No framebuffer target layer found");
         return -EINVAL;
     }
-    
+
     if (pdev->gtype == GRALLOC_GBM) {
         struct gralloc_handle_t *drm_handle = (struct gralloc_handle_t *)fb_target_layer->handle;
         pdev->message.type = MSG_HAVE_BUFFER;
-        pdev->message.format = drm_handle->format;
+        pdev->message.format = ConvertHalFormatToDrm(drm_handle->format);
         pdev->message.modifiers = drm_handle->modifier;
         pdev->message.stride = drm_handle->stride;
         pdev->message.offset = 0; // offset is not used in this case
